@@ -1,7 +1,7 @@
 package client
 
 import (
-	"fmt"
+	"bytes"
 	"log"
 	"os"
 	"os/exec"
@@ -10,13 +10,22 @@ import (
 
 	MQTT "github.com/eclipse/paho.mqtt.golang"
 	"github.com/igzhang/ops_job/pkg"
+	jsoniter "github.com/json-iterator/go"
 )
 
 const (
-	ExecSuccess         = 0
-	ExecFailure         = 1
 	ServerCallbackTopic = "server"
 )
+
+var json = jsoniter.ConfigCompatibleWithStandardLibrary
+
+type RunCmdResult struct {
+	MsgID     uint16
+	ClientID  string
+	IsSuccess bool
+	Stdout    string
+	Stderr    string
+}
 
 func Run() {
 	sigChannel := make(chan os.Signal, 1)
@@ -49,16 +58,25 @@ func clientSubscribeCallback(client MQTT.Client, msg MQTT.Message) {
 	recvMsg := string(msg.Payload())
 	log.Printf("receive msg: %s", recvMsg)
 
-	cmd := exec.Command(recvMsg)
-	var RunCmdResult int
-	if err := cmd.Run(); err != nil {
-		RunCmdResult = ExecSuccess
-	} else {
-		RunCmdResult = ExecFailure
-	}
-	askMsg := fmt.Sprintf("%v:%d", msg.MessageID(), RunCmdResult)
+	cmd := exec.Command("bash", "-c", recvMsg)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
 
-	if token := client.Publish(ServerCallbackTopic, 2, false, askMsg); token.Wait() && token.Error() != nil {
+	runCMDResult := RunCmdResult{MsgID: msg.MessageID(), ClientID: msg.Topic(), IsSuccess: false}
+	if err := cmd.Run(); err == nil {
+		runCMDResult.IsSuccess = true
+	}
+	runCMDResult.Stdout = stdout.String()
+	runCMDResult.Stderr = stderr.String()
+
+	askMsgBytes, err := json.Marshal(&runCMDResult)
+	if err != nil {
+		log.Printf("json err: %s", err.Error())
+	}
+
+	if token := client.Publish(ServerCallbackTopic, 2, false, askMsgBytes); token.Wait() && token.Error() != nil {
 		log.Printf("ask server cmd error: %s", token.Error().Error())
 	}
 }
