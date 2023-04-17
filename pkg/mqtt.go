@@ -6,11 +6,17 @@ import (
 	MQTT "github.com/eclipse/paho.mqtt.golang"
 )
 
-func NewMQTTClient(broker string, clientID string) (*MQTT.Client, error) {
+const qos = 2
+
+func NewMQTTClient(broker string, clientID string, callback MQTT.MessageHandler) (*MQTT.Client, error) {
 	opts := MQTT.NewClientOptions().AddBroker(broker)
 	opts.SetClientID(clientID)
 	opts.SetOnConnectHandler(func(c MQTT.Client) {
 		log.Println("mqtt connection established")
+		if token := c.Subscribe(clientID, qos, callback); token.Wait() && token.Error() != nil {
+			log.Printf("subscribe err: %s", token.Error())
+		}
+		log.Printf("subscribed to %s success!", clientID)
 	})
 
 	c := MQTT.NewClient(opts)
@@ -18,12 +24,4 @@ func NewMQTTClient(broker string, clientID string) (*MQTT.Client, error) {
 		return nil, token.Error()
 	}
 	return &c, nil
-}
-
-func SubscribeTopic(mqttClient *MQTT.Client, topic string, callback MQTT.MessageHandler) error {
-	if token := (*mqttClient).Subscribe(topic, 2, callback); token.Wait() && token.Error() != nil {
-		return token.Error()
-	}
-	log.Printf("subscribed to %s success!", topic)
-	return nil
 }

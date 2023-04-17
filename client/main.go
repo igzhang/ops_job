@@ -41,12 +41,8 @@ func Run() {
 		log.Fatalln("env: id is not specified!")
 	}
 
-	mqttClient, err := pkg.NewMQTTClient(mqttAddr, clientID)
+	_, err := pkg.NewMQTTClient(mqttAddr, clientID, clientSubscribeCallback)
 	if err != nil {
-		log.Fatalln(err.Error())
-	}
-
-	if err = pkg.SubscribeTopic(mqttClient, clientID, clientSubscribeCallback); err != nil {
 		log.Fatalln(err.Error())
 	}
 
